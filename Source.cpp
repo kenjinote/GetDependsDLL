@@ -12,8 +12,76 @@
 
 #define ID_COPYTOCLIPBOARD 1000
 #define ID_SELECTALL 1001
+#define ID_CHECK1 1002
 
 TCHAR szClassName[] = TEXT("Window");
+
+LPTSTR lpszStandardLibrary[] =
+{
+	TEXT("ADVAPI32.DLL"),
+	TEXT("AVICAP32.DLL"),
+	TEXT("CABINET.DLL"),
+	TEXT("COMCTL32.DLL"),
+	TEXT("COMDLG32.DLL"),
+	TEXT("CRYPT32.DLL"),
+	TEXT("D3D9.DLL"),
+	TEXT("DBGHELP.DLL"),
+	TEXT("DINPUT8.DLL"),
+	TEXT("DNSAPI.DLL"),
+	TEXT("DSOUND.DLL"),
+	TEXT("DWMAPI.DLL"),
+	TEXT("GDI32.DLL"),
+	TEXT("GDIPLUS.DLL"),
+	TEXT("GLU32.DLL"),
+	TEXT("IMAGEHLP.DLL"),
+	TEXT("IMM32.DLL"),
+	TEXT("IPHLPAPI.DLL"),
+	TEXT("KERNEL32.DLL"),
+	TEXT("MMDEVAPI.DLL"),
+	TEXT("MPR.DLL"),
+	TEXT("MSACM32.DLL"),
+	TEXT("MSI.DLL"),
+	TEXT("MSIMG32.DLL"),
+	TEXT("MSWSOCK.DLL"),
+	TEXT("NETAPI32.DLL"),
+	TEXT("NORMALIZ.DLL"),
+	TEXT("NTDLL.DLL"),
+	TEXT("ODBC32.DLL"),
+	TEXT("OLE32.DLL"),
+	TEXT("OLEACC.DLL"),
+	TEXT("OLEAUT32.DLL"),
+	TEXT("OLEDLG.DLL"),
+	TEXT("OLEPRO32.DLL"),
+	TEXT("OPENGL32.DLL"),
+	TEXT("PDH.DLL"),
+	TEXT("POWRPROF.DLL"),
+	TEXT("PROPSYS.DLL"),
+	TEXT("PSAPI.DLL"),
+	TEXT("RASAPI32.DLL"),
+	TEXT("RPCRT4.DLL"),
+	TEXT("SECUR32.DLL"),
+	TEXT("SENSAPI.DLL"),
+	TEXT("SETUPAPI.DLL"),
+	TEXT("SHELL32.DLL"),
+	TEXT("SHFOLDER.DLL"),
+	TEXT("SHLWAPI.DLL"),
+	TEXT("URLMON.DLL"),
+	TEXT("USER32.DLL"),
+	TEXT("USERENV.DLL"),
+	TEXT("USP10.DLL"),
+	TEXT("UXTHEME.DLL"),
+	TEXT("VERSION.DLL"),
+	TEXT("WINDOWSCODECS.DLL"),
+	TEXT("WINHTTP.DLL"),
+	TEXT("WININET.DLL"),
+	TEXT("WINMM.DLL"),
+	TEXT("WINSPOOL.DRV"),
+	TEXT("WINTRUST.DLL"),
+	TEXT("WLDAP32.DLL"),
+	TEXT("WS2_32.DLL"),
+	TEXT("WSOCK32.DLL"),
+	TEXT("WTSAPI32.DLL"),
+};
 
 template <class T> PIMAGE_SECTION_HEADER GetEnclosingSectionHeader(DWORD rva, T* pNTHeader) // 'T' == PIMAGE_NT_HEADERS 
 {
@@ -39,18 +107,15 @@ template <class T> PIMAGE_SECTION_HEADER GetEnclosingSectionHeader(DWORD rva, T*
 
 template <class T> LPVOID GetPtrFromRVA(DWORD rva, T* pNTHeader, PBYTE imageBase) // 'T' = PIMAGE_NT_HEADERS 
 {
-	PIMAGE_SECTION_HEADER pSectionHdr;
-	INT delta;
-
-	pSectionHdr = GetEnclosingSectionHeader(rva, pNTHeader);
+	PIMAGE_SECTION_HEADER pSectionHdr = GetEnclosingSectionHeader(rva, pNTHeader);
 	if (!pSectionHdr)
 		return 0;
 
-	delta = (INT)(pSectionHdr->VirtualAddress - pSectionHdr->PointerToRawData);
+	INT delta = (INT)(pSectionHdr->VirtualAddress - pSectionHdr->PointerToRawData);
 	return (PVOID)(imageBase + rva - delta);
 }
 
-void DumpDllFromPath(HWND hList, HWND hBackgroundList2, wchar_t* pathW)
+void DumpDllFromPath(HWND hList, HWND hBackgroundList2, HWND hBackgroundList3, wchar_t* pathW)
 {
 	DWORD len = WideCharToMultiByte(CP_ACP, 0, pathW, -1, 0, 0, 0, 0);
 	LPSTR pathA = (LPSTR)GlobalAlloc(GPTR, len * sizeof(CHAR));
@@ -61,8 +126,6 @@ void DumpDllFromPath(HWND hList, HWND hBackgroundList2, wchar_t* pathW)
 	str += "[";
 	str += PathFindFileNameA(pathA);
 	str += "] ";
-
-	SendMessage(hBackgroundList2, LB_RESETCONTENT, 0, 0);
 
 	PLOADED_IMAGE image = ImageLoad(pathA, 0);
 
@@ -81,7 +144,8 @@ void DumpDllFromPath(HWND hList, HWND hBackgroundList2, wchar_t* pathW)
 			LPCSTR lpszModuleName = (LPCSTR)GetPtrFromRVA(importDesc->Name,
 				image->FileHeader,
 				image->MappedAddress);
-			if (SendMessageA(hBackgroundList2, LB_FINDSTRINGEXACT, -1, (LPARAM)lpszModuleName) == LB_ERR)
+			if (SendMessageA(hBackgroundList3, LB_FINDSTRINGEXACT, -1, (LPARAM)lpszModuleName) == LB_ERR &&
+				SendMessageA(hBackgroundList2, LB_FINDSTRINGEXACT, -1, (LPARAM)lpszModuleName) == LB_ERR)
 			{
 				SendMessageA(hBackgroundList2, LB_ADDSTRING, 0, (LPARAM)lpszModuleName);
 			}
@@ -168,25 +232,41 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static HWND hList, hProgress;
 	static HWND hBackgroundList1;
 	static HWND hBackgroundList2;
+	static HWND hBackgroundList3;
+	static HWND hCheck;
+	static HBRUSH hbrBkgnd;
 	switch (msg)
 	{
 	case WM_CREATE:
 		InitCommonControls();
-		hList = CreateWindow(TEXT("LISTBOX"), 0, WS_CHILD | WS_VSCROLL | LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | LBS_MULTIPLESEL | LBS_SORT, 0, 0, 0, 0, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hList = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("LISTBOX"), 0, WS_CHILD | WS_VSCROLL | LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | LBS_MULTIPLESEL | LBS_SORT, 0, 0, 0, 0, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList1 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList2 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hBackgroundList3 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hCheck = CreateWindow(TEXT("BUTTON"), TEXT("標準DLLを無視する"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, hWnd, (HMENU)ID_CHECK1, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		SendMessage(hCheck, BM_SETCHECK, TRUE, 0);
 		hProgress = CreateWindow(TEXT("msctls_progress32"), 0, WS_CHILD, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		DragAcceptFiles(hWnd, TRUE);
 		break;
 	case WM_SIZE:
-		MoveWindow(hList, 0, 0, LOWORD(lParam), HIWORD(lParam), TRUE);
+		MoveWindow(hCheck, 0, 0, 256, 32, TRUE);
+		MoveWindow(hList, 0, 32, LOWORD(lParam), HIWORD(lParam) - 32, TRUE);
 		MoveWindow(hProgress, 10, HIWORD(lParam) / 2 - 64 / 2, LOWORD(lParam) - 20, 64, 1);
 		break;
 	case WM_DROPFILES:
 		{
+			SendMessage(hBackgroundList3, LB_RESETCONTENT, 0, 0);
+			if (SendMessage(hCheck, BM_GETCHECK, 0, 0))
+			{
+				for (auto v : lpszStandardLibrary)
+				{
+					SendMessage(hBackgroundList3, LB_ADDSTRING, 0, (LPARAM)v);
+				}
+			}
 			ShowWindow(hList, SW_HIDE);
 			SendMessage(hList, LB_RESETCONTENT, 0, 0);
-			SendMessageW(hProgress, PBM_SETPOS, 0, 0);
+			SendMessage(hProgress, PBM_SETPOS, 0, 0);
+			SendMessage(hProgress, PBM_SETMARQUEE, TRUE, 0);
 			ShowWindow(hProgress, SW_SHOW);
 			WCHAR szFilePath[MAX_PATH];
 			const UINT iFileNum = DragQueryFileW((HDROP)wParam, -1, NULL, 0);
@@ -203,20 +283,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				}
 			}
 			DragFinish((HDROP)wParam);
-			SendMessageW(hProgress, PBM_SETRANGE32, 0, SendMessage(hList, LB_GETCOUNT, 0, 0));
-			SendMessageW(hProgress, PBM_SETSTEP, 1, 0);
+			SendMessage(hProgress, PBM_SETMARQUEE, FALSE, 0);
+			SendMessage(hProgress, PBM_SETRANGE32, 0, SendMessage(hBackgroundList1, LB_GETCOUNT, 0, 0));
+			SendMessage(hProgress, PBM_SETSTEP, 1, 0);
 			while (SendMessageW(hBackgroundList1, LB_GETCOUNT, 0, 0))
 			{
 				SendMessageW(hBackgroundList1, LB_GETTEXT, 0, (LPARAM)szFilePath);
-				DumpDllFromPath(hList, hBackgroundList2, szFilePath);
+				DumpDllFromPath(hList, hBackgroundList2, hBackgroundList3, szFilePath);
 				SendMessageW(hBackgroundList1, LB_DELETESTRING, 0, 0);
-				SendMessageW(hProgress, PBM_STEPIT, 0, 0);
+				SendMessage(hProgress, PBM_STEPIT, 0, 0);
 			}
 			ShowWindow(hProgress, SW_HIDE);
 			ShowWindow(hList, SW_SHOW);
-			MessageBoxW(hWnd, L"列挙が完了しました。", L"確認", 0);
 		}
 		break;
+	case WM_CTLCOLORSTATIC:
+		SetBkColor((HDC)wParam, GetSysColor(COLOR_WINDOW));
+		if (hbrBkgnd == NULL)
+		{
+			hbrBkgnd = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
+		}
+		return (INT_PTR)hbrBkgnd;
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
@@ -256,6 +343,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		}
 		break;
 	case WM_DESTROY:
+		DeleteObject(hbrBkgnd);
 		PostQuitMessage(0);
 		break;
 	default:
