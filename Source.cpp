@@ -51,19 +51,21 @@ template <class T> LPVOID GetPtrFromRVA(DWORD rva, T* pNTHeader, PBYTE imageBase
 	return (PVOID)(imageBase + rva - delta);
 }
 
-void DumpDllFromPath(HWND hBackgroundList1, wchar_t* path)
+void DumpDllFromPath(HWND hBackgroundList1, wchar_t* pathW)
 {
-	char name[300];
-	wcstombs(name, path, 300);
+	DWORD len = WideCharToMultiByte(CP_ACP, 0, pathW, -1, 0, 0, 0, 0);
+	LPSTR pathA = (LPSTR)GlobalAlloc(GPTR, len * sizeof(CHAR));
+	WideCharToMultiByte(CP_ACP, 0, pathW, -1, pathA, len, 0, 0);
+
 	std::string str;
 
 	str += "[";
-	str += PathFindFileNameA(name);
+	str += PathFindFileNameA(pathA);
 	str += "] ";
 
 	SendMessage(hBackgroundList2, LB_RESETCONTENT, 0, 0);
 
-	PLOADED_IMAGE image = ImageLoad(name, 0);
+	PLOADED_IMAGE image = ImageLoad(pathA, 0);
 
 	if (image && image->FileHeader->OptionalHeader.NumberOfRvaAndSizes >= 2)
 	{
@@ -84,7 +86,6 @@ void DumpDllFromPath(HWND hBackgroundList1, wchar_t* path)
 			{
 				SendMessageA(hBackgroundList2, LB_ADDSTRING, 0, (LPARAM)lpszModuleName);
 			}
-
 			importDesc++;
 		}
 	}
@@ -106,6 +107,8 @@ void DumpDllFromPath(HWND hBackgroundList1, wchar_t* path)
 	}
 
 	SendMessageA(hBackgroundList1, LB_ADDSTRING, 0, (LPARAM)str.c_str());
+
+	GlobalFree(pathA);
 }
 
 BOOL IsTargetFile(LPCWSTR lpszFilePath)
@@ -176,41 +179,40 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		MoveWindow(hProgress, 10, HIWORD(lParam) / 2 - 64 / 2, LOWORD(lParam) - 20, 64, 1);
 		break;
 	case WM_DROPFILES:
-	{
-		ShowWindow(hList, SW_HIDE);
-		SendMessage(hList, LB_RESETCONTENT, 0, 0);
-		SendMessageW(hProgress, PBM_SETPOS, 0, 0);
-		ShowWindow(hProgress, SW_SHOW);
-		WCHAR szFilePath[MAX_PATH];
-		const UINT iFileNum = DragQueryFileW((HDROP)wParam, -1, NULL, 0);
-		for (UINT i = 0; i < iFileNum; ++i)
 		{
-			DragQueryFileW((HDROP)wParam, i, szFilePath, MAX_PATH);
-			if (PathIsDirectoryW(szFilePath))
+			ShowWindow(hList, SW_HIDE);
+			SendMessage(hList, LB_RESETCONTENT, 0, 0);
+			SendMessageW(hProgress, PBM_SETPOS, 0, 0);
+			ShowWindow(hProgress, SW_SHOW);
+			WCHAR szFilePath[MAX_PATH];
+			const UINT iFileNum = DragQueryFileW((HDROP)wParam, -1, NULL, 0);
+			for (UINT i = 0; i < iFileNum; ++i)
 			{
-				TargetFileCount(szFilePath);
+				DragQueryFileW((HDROP)wParam, i, szFilePath, MAX_PATH);
+				if (PathIsDirectoryW(szFilePath))
+				{
+					TargetFileCount(szFilePath);
+				}
+				else if (IsTargetFile(szFilePath))
+				{
+					SendMessageW(hBackgroundList1, LB_ADDSTRING, 0, (LPARAM)szFilePath);
+				}
 			}
-			else if (IsTargetFile(szFilePath))
+			DragFinish((HDROP)wParam);
+			SendMessageW(hProgress, PBM_SETRANGE32, 0, SendMessage(hList, LB_GETCOUNT, 0, 0));
+			SendMessageW(hProgress, PBM_SETSTEP, 1, 0);
+			while (SendMessageW(hBackgroundList1, LB_GETCOUNT, 0, 0))
 			{
-				SendMessageW(hBackgroundList1, LB_ADDSTRING, 0, (LPARAM)szFilePath);
+				SendMessageW(hBackgroundList1, LB_GETTEXT, 0, (LPARAM)szFilePath);
+				DumpDllFromPath(hList, szFilePath);
+				SendMessageW(hBackgroundList1, LB_DELETESTRING, 0, 0);
+				SendMessageW(hProgress, PBM_STEPIT, 0, 0);
 			}
+			ShowWindow(hProgress, SW_HIDE);
+			ShowWindow(hList, SW_SHOW);
+			MessageBoxW(hWnd, L"更新が完了しました。", L"確認", 0);
 		}
-		DragFinish((HDROP)wParam);
-		SendMessageW(hProgress, PBM_SETRANGE32, 0, SendMessage(hList, LB_GETCOUNT, 0, 0));
-		SendMessageW(hProgress, PBM_SETSTEP, 1, 0);
-		while (SendMessageW(hBackgroundList1, LB_GETCOUNT, 0, 0))
-		{
-			SendMessageW(hBackgroundList1, LB_GETTEXT, 0, (LPARAM)szFilePath);
-			DumpDllFromPath(hList, szFilePath);
-			SendMessageW(hBackgroundList1, LB_DELETESTRING, 0, 0);
-			SendMessageW(hProgress, PBM_STEPIT, 0, 0);
-		}
-		ShowWindow(hProgress, SW_HIDE);
-		ShowWindow(hList, SW_SHOW);
-		MessageBoxW(hWnd, L"更新が完了しました。", L"確認", 0);
-	}
-	break;
-
+		break;
 	case WM_COMMAND:
 		switch (LOWORD(wParam))
 		{
