@@ -1,20 +1,19 @@
 ﻿#pragma comment(linker,"\"/manifestdependency:type='win32' name='Microsoft.Windows.Common-Controls' version='6.0.0.0' processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
 #pragma comment(lib, "shlwapi")
 #pragma comment(lib, "imagehlp")
 #pragma comment(lib, "comctl32")
+
 #include <windows.h>
 #include <commctrl.h>
 #include <shlwapi.h>
-#include "ImageHlp.h"
-
+#include <imagehlp.h>
 #include <string>
 
 #define ID_COPYTOCLIPBOARD 1000
 #define ID_SELECTALL 1001
 
 TCHAR szClassName[] = TEXT("Window");
-HWND hBackgroundList1;
-HWND hBackgroundList2;
 
 template <class T> PIMAGE_SECTION_HEADER GetEnclosingSectionHeader(DWORD rva, T* pNTHeader) // 'T' == PIMAGE_NT_HEADERS 
 {
@@ -51,7 +50,7 @@ template <class T> LPVOID GetPtrFromRVA(DWORD rva, T* pNTHeader, PBYTE imageBase
 	return (PVOID)(imageBase + rva - delta);
 }
 
-void DumpDllFromPath(HWND hBackgroundList1, wchar_t* pathW)
+void DumpDllFromPath(HWND hList, HWND hBackgroundList2, wchar_t* pathW)
 {
 	DWORD len = WideCharToMultiByte(CP_ACP, 0, pathW, -1, 0, 0, 0, 0);
 	LPSTR pathA = (LPSTR)GlobalAlloc(GPTR, len * sizeof(CHAR));
@@ -106,7 +105,10 @@ void DumpDllFromPath(HWND hBackgroundList1, wchar_t* pathW)
 		str.pop_back();
 	}
 
-	SendMessageA(hBackgroundList1, LB_ADDSTRING, 0, (LPARAM)str.c_str());
+	if (SendMessageA(hList, LB_FINDSTRINGEXACT, -1, (LPARAM)str.c_str()) == LB_ERR)
+	{
+		SendMessageA(hList, LB_ADDSTRING, 0, (LPARAM)str.c_str());
+	}
 
 	GlobalFree(pathA);
 }
@@ -128,7 +130,7 @@ BOOL IsTargetFile(LPCWSTR lpszFilePath)
 	return FALSE;
 }
 
-VOID TargetFileCount(LPCWSTR lpInputPath)
+VOID TargetFileCount(HWND hBackgroundList1, LPCWSTR lpInputPath)
 {
 	WCHAR szFullPattern[MAX_PATH];
 	WIN32_FIND_DATAW FindFileData;
@@ -145,7 +147,7 @@ VOID TargetFileCount(LPCWSTR lpInputPath)
 					lstrcmpW(FindFileData.cFileName, L".") != 0)
 				{
 					PathCombineW(szFullPattern, lpInputPath, FindFileData.cFileName);
-					TargetFileCount(szFullPattern);
+					TargetFileCount(hBackgroundList1, szFullPattern);
 				}
 			}
 			else
@@ -164,11 +166,13 @@ VOID TargetFileCount(LPCWSTR lpInputPath)
 LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	static HWND hList, hProgress;
+	static HWND hBackgroundList1;
+	static HWND hBackgroundList2;
 	switch (msg)
 	{
 	case WM_CREATE:
 		InitCommonControls();
-		hList = CreateWindow(TEXT("LISTBOX"), 0, WS_CHILD | WS_VSCROLL | WS_HSCROLL | LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | LBS_MULTIPLESEL, 0, 0, 0, 0, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hList = CreateWindow(TEXT("LISTBOX"), 0, WS_CHILD | WS_VSCROLL | LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | LBS_MULTIPLESEL | LBS_SORT, 0, 0, 0, 0, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList1 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList2 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hProgress = CreateWindow(TEXT("msctls_progress32"), 0, WS_CHILD, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
@@ -191,7 +195,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 				DragQueryFileW((HDROP)wParam, i, szFilePath, MAX_PATH);
 				if (PathIsDirectoryW(szFilePath))
 				{
-					TargetFileCount(szFilePath);
+					TargetFileCount(hBackgroundList1, szFilePath);
 				}
 				else if (IsTargetFile(szFilePath))
 				{
@@ -204,7 +208,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			while (SendMessageW(hBackgroundList1, LB_GETCOUNT, 0, 0))
 			{
 				SendMessageW(hBackgroundList1, LB_GETTEXT, 0, (LPARAM)szFilePath);
-				DumpDllFromPath(hList, szFilePath);
+				DumpDllFromPath(hList, hBackgroundList2, szFilePath);
 				SendMessageW(hBackgroundList1, LB_DELETESTRING, 0, 0);
 				SendMessageW(hProgress, PBM_STEPIT, 0, 0);
 			}
@@ -217,35 +221,35 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 		switch (LOWORD(wParam))
 		{
 		case ID_COPYTOCLIPBOARD:
-		{
-			const int nSelItems = (int)SendMessage(hList, LB_GETSELCOUNT, 0, 0);
-			if (nSelItems > 0)
 			{
-				int* pBuffer = (int*)GlobalAlloc(0, sizeof(int) * nSelItems);
-				SendMessage(hList, LB_GETSELITEMS, nSelItems, (LPARAM)pBuffer);
-				INT nLen = 1; // NULL分
-				for (int i = 0; i < nSelItems; ++i)
+				const int nSelItems = (int)SendMessage(hList, LB_GETSELCOUNT, 0, 0);
+				if (nSelItems > 0)
 				{
-					nLen += (int)SendMessage(hList, LB_GETTEXTLEN, pBuffer[i], 0);
-					nLen += 2; // 改行文字分
+					int* pBuffer = (int*)GlobalAlloc(0, sizeof(int) * nSelItems);
+					SendMessage(hList, LB_GETSELITEMS, nSelItems, (LPARAM)pBuffer);
+					INT nLen = 1; // NULL分
+					for (int i = 0; i < nSelItems; ++i)
+					{
+						nLen += (int)SendMessage(hList, LB_GETTEXTLEN, pBuffer[i], 0);
+						nLen += 2; // 改行文字分
+					}
+					HGLOBAL hMem = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, sizeof(TCHAR)*(nLen + 1));
+					LPTSTR lpszBuflpszBuf = (LPTSTR)GlobalLock(hMem);
+					for (int i = 0; i < nSelItems; i++)
+					{
+						const int nSize = (int)SendMessage(hList, LB_GETTEXT, pBuffer[i], (LPARAM)lpszBuflpszBuf);
+						lstrcat(lpszBuflpszBuf, TEXT("\r\n"));
+						lpszBuflpszBuf += nSize + 2;
+					}
+					GlobalFree(pBuffer);
+					GlobalUnlock(hMem);
+					OpenClipboard(NULL);
+					EmptyClipboard();
+					SetClipboardData(CF_UNICODETEXT, hMem);
+					CloseClipboard();
 				}
-				HGLOBAL hMem = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, sizeof(TCHAR)*(nLen + 1));
-				LPTSTR lpszBuflpszBuf = (LPTSTR)GlobalLock(hMem);
-				for (int i = 0; i < nSelItems; i++)
-				{
-					const int nSize = (int)SendMessage(hList, LB_GETTEXT, pBuffer[i], (LPARAM)lpszBuflpszBuf);
-					lstrcat(lpszBuflpszBuf, TEXT("\r\n"));
-					lpszBuflpszBuf += nSize + 2;
-				}
-				GlobalFree(pBuffer);
-				GlobalUnlock(hMem);
-				OpenClipboard(NULL);
-				EmptyClipboard();
-				SetClipboardData(CF_UNICODETEXT, hMem);
-				CloseClipboard();
 			}
-		}
-		break;
+			break;
 		case ID_SELECTALL:
 			SendMessage(hList, LB_SETSEL, 1, -1);
 			break;
