@@ -373,7 +373,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPreInst, LPSTR pCmdLine, int 
 	RegisterClass(&wndclass);
 	HWND hWnd = CreateWindow(
 		szClassName,
-		TEXT("ドロップされたEXE,DLLが依存するDLLを列挙"),
+		TEXT("ドロップされたEXE,DLLが依存する静的リンクDLLを列挙"),
 		WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT,
 		0,
