@@ -214,7 +214,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			}
 			ShowWindow(hProgress, SW_HIDE);
 			ShowWindow(hList, SW_SHOW);
-			MessageBoxW(hWnd, L"更新が完了しました。", L"確認", 0);
+			MessageBoxW(hWnd, L"列挙が完了しました。", L"確認", 0);
 		}
 		break;
 	case WM_COMMAND:
