@@ -13,6 +13,7 @@
 #define ID_COPYTOCLIPBOARD 1000
 #define ID_SELECTALL 1001
 #define ID_CHECK1 1002
+#define ID_CLEAR 1003
 
 TCHAR szClassName[] = TEXT("Window");
 
@@ -237,22 +238,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	static HWND hBackgroundList2;
 	static HWND hBackgroundList3;
 	static HWND hCheck;
+	static HWND hButton;
 	static HBRUSH hbrBkgnd;
 	switch (msg)
 	{
 	case WM_CREATE:
 		InitCommonControls();
-		hList = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("LISTBOX"), 0, WS_CHILD | WS_VSCROLL | LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | LBS_MULTIPLESEL | LBS_SORT, 0, 0, 0, 0, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hList = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("LISTBOX"), 0, WS_CHILD | WS_VSCROLL | WS_HSCROLL | LBS_NOINTEGRALHEIGHT | LBS_EXTENDEDSEL | LBS_MULTIPLESEL | LBS_SORT, 0, 0, 0, 0, hWnd, (HMENU)IDOK, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList1 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList2 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hBackgroundList3 = CreateWindow(TEXT("LISTBOX"), 0, 0, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		hCheck = CreateWindow(TEXT("BUTTON"), TEXT("標準DLLを無視する"), WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX, 0, 0, 0, 0, hWnd, (HMENU)ID_CHECK1, ((LPCREATESTRUCT)lParam)->hInstance, 0);
+		hButton = CreateWindow(TEXT("BUTTON"), TEXT("クリア"), WS_VISIBLE | WS_CHILD, 0, 0, 0, 0, hWnd, (HMENU)ID_CLEAR, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		SendMessage(hCheck, BM_SETCHECK, TRUE, 0);
 		hProgress = CreateWindow(TEXT("msctls_progress32"), 0, WS_CHILD, 0, 0, 0, 0, hWnd, 0, ((LPCREATESTRUCT)lParam)->hInstance, 0);
 		DragAcceptFiles(hWnd, TRUE);
 		break;
 	case WM_SIZE:
 		MoveWindow(hCheck, 0, 0, 256, 32, TRUE);
+		MoveWindow(hButton, 266, 0, 256, 32, TRUE);
 		MoveWindow(hList, 0, 32, LOWORD(lParam), HIWORD(lParam) - 32, TRUE);
 		MoveWindow(hProgress, 10, HIWORD(lParam) / 2 - 64 / 2, LOWORD(lParam) - 20, 64, 1);
 		break;
@@ -342,6 +346,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 			break;
 		case ID_SELECTALL:
 			SendMessage(hList, LB_SETSEL, 1, -1);
+			break;
+		case ID_CLEAR:
+			SendMessage(hList, LB_RESETCONTENT, 0, 0);
 			break;
 		}
 		break;
